@@ -1,0 +1,41 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mnist-batch-prediction-job
+spec:
+  template:
+    metadata:
+      name: mnist
+      annotations:
+        gke-gcsfuse/volumes: "true"
+    spec:
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-tesla-t4
+      tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+      containers:
+      - name: tensorflow
+        image: tensorflow/tensorflow:latest-gpu 
+        command: ["/bin/bash", "-c", "--"]
+        args: ["cd /data/tensorflow-mnist-example; pip install -r requirements.txt; python tensorflow_mnist_batch_predict.py"]
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+            cpu: 1
+            memory: 3Gi
+        volumeMounts:
+        - name: gcs-fuse-csi-vol
+          mountPath: /data
+          readOnly: false
+      serviceAccountName: $K8S_SA_NAME
+      volumes:
+      - name: gcs-fuse-csi-vol
+        csi:
+          driver: gcsfuse.csi.storage.gke.io
+          readOnly: false
+          volumeAttributes:
+            bucketName: $BUCKET_NAME
+            mountOptions: "implicit-dirs"
+      restartPolicy: "Never"
